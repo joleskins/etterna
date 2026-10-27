@@ -33,6 +33,16 @@ jobs:
         with:
           repository: etternagame/CrashpadTools
           path: tools
+          ref: 'main'
+      
+      - name: Install Vulkan SDK
+        shell: bash
+        run: |
+          . main/.ci/vulkan_setup_env.sh
+          preset_env
+          . main/.ci/vulkan_prebuilt_helpers.sh
+          download_vulkan_installer ${VULKAN_SDK_PLATFORM}
+          unpack_vulkan_installer ${VULKAN_SDK_PLATFORM}
 
       - name: Setup Crashpad
         shell: bash
@@ -48,7 +58,7 @@ jobs:
       - name: Install OpenSSL 3.5
         run: mkdir -p tmp/openssl && cd tmp/openssl && wget https://github.com/openssl/openssl/releases/download/openssl-3.5.1/openssl-3.5.1.tar.gz && tar -xf openssl-3.5.1.tar.gz && cd openssl-3.5.1 && ./Configure --prefix="${HOME}/toolchain" && make -j `nproc` && make test -j `nproc` && sudo make install
       - name: Generate CMake
-        run: mkdir main/build && cd main/build && cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -DOPENSSL_ROOT_DIR=~/toolchain/ ..
+        run: mkdir main/build && cd main/build && cmake -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -DOPENSSL_ROOT_DIR=~/toolchain/ -DCMAKE_CXX_FLAGS="-D_DEBUG" ${{ (matrix.cfg.archstr == 'aarch64' || matrix.cfg.cxx == 'g++-11') && '-DWITH_VULKAN=OFF' || '' }} ..
         env:
           CXX: ${{matrix.cfg.cxx}}
           CC: ${{matrix.cfg.cc}}
@@ -131,6 +141,15 @@ jobs:
           repository: etternagame/CrashpadTools
           path: tools
 
+      - name: Install Vulkan SDK
+        shell: bash
+        run: |
+          . main/.ci/vulkan_setup_env.sh
+          preset_env
+          . main/.ci/vulkan_prebuilt_helpers.sh
+          download_vulkan_installer ${VULKAN_SDK_PLATFORM}
+          unpack_vulkan_installer ${VULKAN_SDK_PLATFORM}
+
       - name: Setup Crashpad
         shell: bash
         run: |
@@ -154,7 +173,7 @@ jobs:
           echo "ETT_MAC_SYS_NAME=M1" >> $GITHUB_ENV
 
       - name: Generate CMake
-        run: mkdir main/build && cd main/build && cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_CRASHPAD=OFF -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -G Ninja ..
+        run: mkdir main/build && cd main/build && cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DWITH_CRASHPAD=OFF -DWITH_VULKAN=OFF -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -G Ninja ..
 
       - name: Build Project
         run: cd main/build && ninja
@@ -262,7 +281,7 @@ jobs:
           echo "ETT_MAC_SYS_NAME=Darwin-x64" >> $GITHUB_ENV
 
       - name: Generate CMake
-        run: mkdir main/build && cd main/build && cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -G Ninja ..
+        run: mkdir main/build && cd main/build && cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -DWITH_VULKAN=OFF -G Ninja ..
 
       - name: Build Project
         run: cd main/build && ninja
@@ -346,6 +365,15 @@ jobs:
           repository: etternagame/CrashpadTools
           path: tools
 
+      - name: Install Vulkan SDK
+        shell: bash
+        run: |
+          . main/.ci/vulkan_setup_env.sh
+          preset_env
+          . main/.ci/vulkan_prebuilt_helpers.sh
+          download_vulkan_installer ${VULKAN_SDK_PLATFORM}
+          unpack_vulkan_installer ${VULKAN_SDK_PLATFORM}
+
       - name: Setup Crashpad
         shell: bash
         run: |
@@ -364,7 +392,7 @@ jobs:
           echo "ETT_MAC_SYS_NAME=High-Sierra" >> $GITHUB_ENV
 
       - name: Generate CMake
-        run: mkdir main/build && cd main/build && cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DWITH_CRASHPAD=OFF -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -DCMAKE_BUILD_TYPE=RelWithDebInfo -G Ninja ..
+        run: mkdir main/build && cd main/build && cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl -DWITH_CRASHPAD=OFF -DWITH_VULKAN=OFF -DBUILD_TESTS=FALSE -DBUILD_EXAMPLES=FALSE -DCMAKE_BUILD_TYPE=RelWithDebInfo -G Ninja ..
 
       - name: Build Project
         run: cd main/build && ninja
@@ -459,6 +487,15 @@ jobs:
           repository: nico-abram/dxsdk
           path: dxsdk
 
+      - name: Install Vulkan SDK
+        shell: bash
+        run: |
+          . main/.ci/vulkan_setup_env.sh
+          preset_env
+          . main/.ci/vulkan_prebuilt_helpers.sh
+          download_vulkan_installer ${VULKAN_SDK_PLATFORM}
+          unpack_vulkan_installer ${VULKAN_SDK_PLATFORM}
+
       - name: Update Environment Variables
         run: |
           echo "${{github.workspace}}/tools/win/" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -475,7 +512,7 @@ jobs:
 
       - name: Install openSSL (x64)
         if: ${{ matrix.cfg.arch == 'x64' }}
-        run: choco install openssl -y
+        run: msiexec /i https://slproweb.com/download/Win64OpenSSL-4_0_2.msi /quiet
       
       #TODO: Also print Python install logs, more?
       - name: Print Install Failures (if present)

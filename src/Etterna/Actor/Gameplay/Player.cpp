@@ -505,7 +505,8 @@ Player::NeedsHoldJudging(const TapNote& tn) -> bool
 static TapNoteScore
 GetAutoplayTapNoteScore(const PlayerState* pPlayerState)
 {
-	if (pPlayerState->m_PlayerController == PC_REPLAY)
+	if (pPlayerState->m_PlayerController == PC_REPLAY ||
+		pPlayerState->m_PlayerController == PC_SPECTATE)
 		return TNS_Miss;
 	if (pPlayerState->m_PlayerController == PC_AUTOPLAY ||
 		pPlayerState->m_PlayerController == PC_CPU)
@@ -1124,7 +1125,8 @@ Player::UpdateHoldNotes(int iSongRow,
 		/*if( iMaxEndRow-iStartRow <= 4 )
 			bInitiatedNote = true;
 		else*/
-		bInitiatedNote = bSteppedOnHead;
+		bInitiatedNote =
+		  bSteppedOnHead || m_pPlayerState->m_PlayerController == PC_SPECTATE;
 	} else {
 		bInitiatedNote = true;
 		bHeadJudged = true;
@@ -1153,8 +1155,11 @@ Player::UpdateHoldNotes(int iSongRow,
 				GAMESTATE->GetCurrentStyle(GetPlayerState()->m_PlayerNumber)
 				  ->StyleInputToGameInput(iTrack, GameI);
 
+				// spectators are always holding the button
+				// and hold drops are forced by the replay
 				bIsHoldingButton &=
-				  INPUTMAPPER->IsBeingPressed(GameI, m_pPlayerState->m_mp);
+				  INPUTMAPPER->IsBeingPressed(GameI, m_pPlayerState->m_mp) ||
+				  m_pPlayerState->m_PlayerController == PC_SPECTATE;
 			}
 		}
 	}
@@ -1312,7 +1317,7 @@ Player::UpdateHoldNotes(int iSongRow,
 		// holds. At least, that hapened on my Mac. -wolfman2000
 
 		static auto* pVolume =
-		  Preference<float>::GetPreferenceByName("SoundVolume");
+		  Preference<float>::GetPreferenceByName("SoundVolumeMaster");
 		if (pVolume != nullptr) {
 			static auto fVol = pVolume->Get();
 
@@ -1556,19 +1561,6 @@ Player::ChangeLifeRecord() const
 			  GAMESTATE->m_Position.m_fMusicSeconds /
 				GAMESTATE->m_SongOptions.GetCurrent().m_fMusicRate);
 		}
-	}
-}
-
-void
-Player::ChangeWifeRecord() const
-{
-	// Sets the life ... to the wife....
-	// That's not right.
-	if (m_pPlayerStageStats != nullptr) {
-		m_pPlayerStageStats->SetLifeRecordAt(
-		  curwifescore / maxwifescore,
-		  GAMESTATE->m_Position.m_fMusicSeconds /
-			GAMESTATE->m_SongOptions.GetCurrent().m_fMusicRate);
 	}
 }
 
@@ -1835,7 +1827,7 @@ Player::PlayKeysound(const TapNote& tn, TapNoteScore score)
 		}
 		m_vKeysounds[tn.iKeysoundIndex].Play(false);
 		static auto* pVolume =
-		  Preference<float>::GetPreferenceByName("SoundVolume");
+		  Preference<float>::GetPreferenceByName("SoundVolumeMaster");
 		static auto fVol = pVolume->Get();
 		m_vKeysounds[tn.iKeysoundIndex].SetProperty("Volume", fVol);
 	}
@@ -1852,6 +1844,9 @@ Player::AddNoteToReplayData(int col,
 	m_pPlayerStageStats->m_vNoteRowVector.emplace_back(
 	  RowOfOverlappingNoteOrRow);
 	m_pPlayerStageStats->m_vTapNoteTypeVector.emplace_back(pTN->type);
+
+	NSMAN->ReportV2Data(
+	  col, RowOfOverlappingNoteOrRow, pTN->result.fTapNoteOffset, pTN->type);
 }
 
 void
@@ -1867,6 +1862,10 @@ Player::AddHoldToReplayData(int col,
 	hrr.track = col;
 	hrr.subType = pTN->subType;
 	m_pPlayerStageStats->m_vHoldReplayData.emplace_back(hrr);
+
+	if (pTN->HoldResult.hns == HNS_LetGo || pTN->HoldResult.hns == HNS_Missed) {
+		NSMAN->ReportReplayHold(col, RowOfOverlappingNoteOrRow, pTN->subType);
+	}
 }
 
 void
@@ -1876,6 +1875,7 @@ Player::AddMineToReplayData(int col, int row) const
 	mrr.row = row;
 	mrr.track = col;
 	m_pPlayerStageStats->m_vMineReplayData.emplace_back(mrr);
+	NSMAN->ReportReplayMine(row, col);
 }
 
 void
@@ -2097,6 +2097,13 @@ Player::Step(int col,
 			  -fNoteOffset,
 			  pTN->type,
 			  pTN->subType);
+			NSMAN->ReportReplayInput(!bRelease,
+									 col,
+									 iRowOfOverlappingNoteOrRow,
+									 fMusicSeconds,
+									 -fNoteOffset,
+									 pTN->type,
+									 pTN->subType);
 		}
 
 		NOTESKIN->SetLastSeenColor(
@@ -2335,6 +2342,13 @@ Player::Step(int col,
 													0.F,
 													tnt,
 													tnst);
+		NSMAN->ReportReplayInput(!bRelease,
+								 col,
+								 iRowOfOverlappingNoteOrRow,
+								 fMusicSeconds,
+								 0.F,
+								 tnt,
+								 tnst);
 	}
 
 	if (score == TNS_None) {
@@ -3061,7 +3075,8 @@ Player::SetMineJudgment(TapNoteScore tns, int iTrack, int iRow)
 				}
 			}
 			if (m_pPlayerState->m_PlayerController == PC_HUMAN ||
-				m_pPlayerState->m_PlayerController == PC_REPLAY) {
+				m_pPlayerState->m_PlayerController == PC_REPLAY ||
+				m_pPlayerState->m_PlayerController == PC_SPECTATE) {
 				m_pPlayerStageStats->m_fWifeScore =
 				  curwifescore / totalwifescore;
 				m_pPlayerStageStats->CurWifeScore = curwifescore;
@@ -3100,6 +3115,7 @@ Player::SetJudgment(int iRow,
 		  GAMESTATE->CountNotesSeparately() ? iTrack : -1,
 		  tn.type,
 		  tn.subType);
+		NSMAN->ReportReplayMiss(iTrack, iRow, tn.type, tn.subType);
 	}
 
 	if (m_bSendJudgmentAndComboMessages) {
@@ -3118,7 +3134,7 @@ Player::SetJudgment(int iRow,
 				Locator::getLogger()->fatal(
 				  "Invalid TNS {} sent to SetJudgment. Ignored 'Val' param in "
 				  "JudgmentMessage",
-				  tns);
+				  static_cast<int>(tns));
 			} else {
 				msg.SetParam("Val",
 							 m_pPlayerStageStats->m_iTapNoteScores[tns] + 1);
@@ -3171,7 +3187,8 @@ Player::SetJudgment(int iRow,
 				}
 			}
 			if (m_pPlayerState->m_PlayerController == PC_HUMAN ||
-				m_pPlayerState->m_PlayerController == PC_REPLAY) {
+				m_pPlayerState->m_PlayerController == PC_REPLAY ||
+				m_pPlayerState->m_PlayerController == PC_SPECTATE) {
 				m_pPlayerStageStats->m_fWifeScore =
 				  curwifescore / totalwifescore;
 				m_pPlayerStageStats->CurWifeScore = curwifescore;
@@ -3292,7 +3309,8 @@ Player::SetHoldJudgment(TapNote& tn, int iTrack, int iRow)
 				}
 			}
 			if (m_pPlayerState->m_PlayerController == PC_HUMAN ||
-				m_pPlayerState->m_PlayerController == PC_REPLAY) {
+				m_pPlayerState->m_PlayerController == PC_REPLAY ||
+				m_pPlayerState->m_PlayerController == PC_SPECTATE) {
 				m_pPlayerStageStats->m_fWifeScore =
 				  curwifescore / totalwifescore;
 				m_pPlayerStageStats->CurWifeScore = curwifescore;

@@ -49,6 +49,66 @@ GameState* GAMESTATE = nullptr;
 #ifdef SUPPORT_DISCORD_SDK
 discordpp::Client* DISCORD = nullptr;
 static const auto discord_appid = 378543094531883009;
+static auto discord_thread_running = false;
+std::unique_ptr<std::thread> discord_thread;
+static std::mutex discord_mut;
+static Preference<bool> DISCORD_ENABLED("EnableDiscord", true);
+
+static std::vector<discordpp::Activity> rpc_queue{};
+
+static void discordRpcQueue(discordpp::Activity activity) {
+	std::lock_guard<std::mutex> lock(discord_mut);
+	rpc_queue.push_back(activity);
+}
+
+static void discord_thread_work() {
+
+	while (discord_thread_running) {
+
+		if (!DISCORD_ENABLED) {
+			discord_thread_running = false;
+			return;
+		}
+
+		std::vector<discordpp::Activity> copied_rpc_activity{};
+		{
+			std::lock_guard<std::mutex> lock(discord_mut);
+
+			if (rpc_queue.size() > 0) {
+				copied_rpc_activity = rpc_queue;
+				rpc_queue.clear();
+			}
+		}
+
+		if (copied_rpc_activity.size() > 0) {
+
+			// non reference copy
+			auto activity = copied_rpc_activity.back();
+
+			if (DISCORD == nullptr) {
+				Locator::getLogger()->fatal(
+				  "Discord RPC seems to be disconnected, so the thread will "
+				  "exit.");
+				return;
+			} else {
+				DISCORD->UpdateRichPresence(
+				  activity, [](discordpp::ClientResult result) {
+					  if (result.Successful()) {
+						  Locator::getLogger()->info(
+							"Discord RPC successfully updated");
+					  } else {
+						  Locator::getLogger()->warn(
+							"Discord RPC failed to set - {}", result.Error());
+					  }
+				  });
+			}
+		}
+
+		discordpp::RunCallbacks();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	}
+}
+
 #endif
 
 class GameStateMessageHandler : public MessageSubscriber
@@ -725,9 +785,6 @@ GameState::Update(float fDelta)
 
 	m_pPlayerState->Update(fDelta);
 
-#ifdef SUPPORT_DISCORD_SDK
-	discordpp::RunCallbacks();
-#endif
 }
 
 void
@@ -1287,6 +1344,12 @@ void
 GameState::discordInit()
 {
 #ifdef SUPPORT_DISCORD_SDK
+
+	if (!DISCORD_ENABLED) {
+		discord_thread_running = false;
+		return;
+	}
+
 	if (DISCORD != nullptr) {
 		Locator::getLogger()->warn("Tried to initialize Discord twice. Skipped");
 		return;
@@ -1309,6 +1372,20 @@ GameState::discordInit()
 	DISCORD->AddLogCallback(
 	  [](auto msg, auto severity) { Locator::getLogger()->info("{}", msg); },
 	  discordpp::LoggingSeverity::None);
+
+	{
+		std::lock_guard<std::mutex> lock(discord_mut);
+
+		discord_thread_running = false;
+		if (discord_thread != nullptr) {
+			if (discord_thread->joinable())
+				discord_thread->join();
+		}
+
+		discord_thread_running = true;
+		discord_thread = std::make_unique<std::thread>(discord_thread_work);
+		discord_thread->detach();
+	}
 
 	updateDiscordPresenceMenu();
 #else
@@ -1363,15 +1440,7 @@ GameState::updateDiscordPresence(const std::string& details,
 	activity.SetTimestamps(ts);
 	activity.SetAssets(assets);
 
-	DISCORD->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
-		if (result.Successful()) {
-			Locator::getLogger()->warn("Rich presence (Gameplay/Eval) successfully set");
-		}
-		else {
-			Locator::getLogger()->warn("Rich presence (Gameplay/Eval) failed to set - {}",
-									   result.Error());
-		}
-	});
+	discordRpcQueue(activity);
 #else
 	Locator::getLogger()->warn(
 	  "Discord presence not available for this platform");
@@ -1434,14 +1503,7 @@ GameState::updateDiscordPresenceMenu()
 	activity.SetName("Etterna");
 	activity.SetAssets(assets);
 
-	DISCORD->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
-		if (result.Successful()) {
-			Locator::getLogger()->warn("Rich presence (Menu) successfully set");
-		} else {
-			Locator::getLogger()->warn("Rich presence (Menu) failed to set - {}",
-									   result.Error());
-		}
-	});
+	discordRpcQueue(activity);
 #else
 	Locator::getLogger()->warn(
 	  "Discord presence not available for this platform");
@@ -1456,7 +1518,8 @@ GameState::TogglePracticeModeSafe(bool set)
 	  screenname.find("ScreenGameplay") != std::string::npos;
 
 	// This isnt really "safe" but should at least make it harder to break
-	if (m_gameplayMode != GameplayMode_Replay && !gameplayscreen) {
+	if (m_gameplayMode != GameplayMode_Replay &&
+		m_gameplayMode != GameplayMode_Spectate && !gameplayscreen) {
 		TogglePracticeMode(set);
 	}
 }
@@ -1935,7 +1998,9 @@ class LunaGameState : public Luna<GameState>
 	{
 		// Don't allow disabling replay controlller
 		if (PC_REPLAY == p->m_pPlayerState->m_PlayerController ||
-			PC_REPLAY == GamePreferences::m_AutoPlay)
+			PC_REPLAY == GamePreferences::m_AutoPlay ||
+			PC_SPECTATE == p->m_pPlayerState->m_PlayerController ||
+			PC_SPECTATE == GamePreferences::m_AutoPlay)
 			return 0;
 		p->m_pPlayerState->m_PlayerController = BArg(1) ? PC_CPU : PC_HUMAN;
 		GamePreferences::m_AutoPlay.Set(p->m_pPlayerState->m_PlayerController);

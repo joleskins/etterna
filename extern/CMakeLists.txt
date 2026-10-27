@@ -17,20 +17,14 @@ set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE) # Disable curl libssh2
 set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)    # Tell curl not to build standalone binary
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)     # Disable curl testing
 set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)  # Require OpenSSL
-set(HTTP_ONLY ON CACHE BOOL "" FORCE)          # Disable all protocols except HTTP/S
+set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+set(HTTP_ONLY OFF CACHE BOOL "" FORCE)
 add_subdirectory(curl)
 
 ## SQLiteCpp
 set(SQLITECPP_RUN_CPPCHECK OFF CACHE BOOL "" FORCE) # Disable SQLiteCpp static analysis
 set(SQLITECPP_RUN_CPPLINT OFF CACHE BOOL "" FORCE)  # Disable SQLiteCpp lintiPng
 add_subdirectory(SQLiteCpp)
-
-## websocketpp
-add_subdirectory(asio) # Only required for websocketpp
-add_subdirectory(websocketpp)
-add_library(websocketpp INTERFACE)
-target_include_directories(websocketpp INTERFACE websocketpp)
-target_link_libraries(websocketpp INTERFACE asio)
 
 ## discord-rpc
 if(SUPPORT_DISCORD_SDK)
@@ -75,12 +69,22 @@ add_subdirectory(newogg)
 add_subdirectory(newvorbis)
 target_link_libraries(vorbis ogg)
 
+if(WITH_VULKAN)
+    add_subdirectory(vk-bootstrap)
+    add_subdirectory(VulkanMemoryAllocator)
+    list(APPEND EXT_TARGETS vk-bootstrap VulkanMemoryAllocator)
+endif()
+
 # Only enable crashpad if the user wants it.
 if(WITH_CRASHPAD)
     add_subdirectory(crashpad)
 endif()
 
-if(MSVC) # Only required on Windows
+if(MSVC)
+    add_subdirectory(ffmpeg)
+endif()
+
+if(_proc STREQUAL "x86_64" AND UNIX AND NOT APPLE)
     add_subdirectory(ffmpeg)
 endif()
 

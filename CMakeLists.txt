@@ -15,11 +15,12 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW) # Tell CMake to use the new policy for CMP
 ## We statically link the CRT by default. If you would like to dynamically
 ## link the CRT, you can append "DLL" to the end of the variable below.
 ## More Info: https://cmake.org/cmake/help/latest/variable/CMAKE_MSVC_RUNTIME_LIBRARY.html
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 # PROJECT WIDE SETUP
 project(Etterna
-		VERSION 0.75.0
+		VERSION 0.75.1
         HOMEPAGE_URL https://github.com/etternagame/etterna/
         LANGUAGES C CXX ASM)
 
@@ -42,6 +43,8 @@ add_executable(Etterna)
 
 # Project Compile Options
 set(WITH_CRASHPAD TRUE CACHE BOOL "Compile with Crash Handler (Requires depot_tools installed)")
+set(WITH_VULKAN TRUE CACHE BOOL "Compile Vulkan support (Requires Vulkan SDK to be installed and VULKAN_SDK environment variable to be set to SDK root dir)")
+set(WITH_VULKAN_LINUX_EXTRAS FALSE CACHE BOOL "Link additional Vulkan dependencies (fix for some Linux distros)")
 
 # Discord doesn't seem to provide Linux arm64 binaries...
 set(SUPPORT_DISCORD_SDK ON)
@@ -108,7 +111,6 @@ target_link_libraries(Etterna PRIVATE SQLiteCpp sqlite3)
 target_link_libraries(Etterna PRIVATE zlib)
 target_link_libraries(Etterna PRIVATE rapidjson)
 target_link_libraries(Etterna PRIVATE jwt-cpp)
-target_link_libraries(Etterna PRIVATE websocketpp)
 target_link_libraries(Etterna PRIVATE libluajit)
 
 if(SUPPORT_DISCORD_SDK)
@@ -130,6 +132,29 @@ target_link_libraries(Etterna PRIVATE plog::plog)
 target_link_libraries(Etterna PRIVATE nowide::nowide)
 target_link_libraries(Etterna PRIVATE ghc_filesystem)
 
+if(WITH_VULKAN)
+    add_compile_definitions(Etterna PRIVATE WITH_VULKAN)
+    target_link_libraries(Etterna PRIVATE vk-bootstrap::vk-bootstrap)
+    target_link_libraries(Etterna PRIVATE VulkanMemoryAllocator)
+
+    find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
+    target_link_libraries(Etterna PRIVATE
+        Vulkan::Headers
+        Vulkan::shaderc_combined)
+
+    if(WITH_VULKAN_LINUX_EXTRAS AND UNIX AND NOT APPLE)
+        target_link_libraries(Etterna PRIVATE
+            glslang
+            MachineIndependent
+            OSDependent
+            GenericCodeGen
+            SPIRV
+            glslang-default-resource-limits
+            SPIRV-Tools
+            SPIRV-Tools-opt)
+    endif()
+endif()
+
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _proc)
 if(_proc MATCHES "^(arm64|aarch64)$")
   target_link_libraries(Etterna PRIVATE sse2neon)
@@ -148,6 +173,9 @@ elseif(APPLE)
     include(CMake/Helpers/SetupFFMPEG.cmake)
     include(CMake/Helpers/CMakeMacOS.cmake)
 elseif(UNIX)
+	if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+        target_link_libraries(Etterna PRIVATE ffmpeg)
+	endif()
     include(CMake/Helpers/CMakeLinux.cmake)
 endif()
 

@@ -250,6 +250,8 @@ local t = Def.ActorFrame {
                     holds = replay:GetHoldNoteVector(),
                     mines = replay:GetMineHitVector(),
                     misses = replay:GetMissDataVector(),
+                    tracks = replay:GetTrackVector(),
+                    types = replay:GetTapNoteTypeVector(),
                 }
             end
 
@@ -261,6 +263,8 @@ local t = Def.ActorFrame {
             local holdsV = replayVectorsMapToMakeItNotSuck[replay:GetScoreKey()].holds
             local minesV = replayVectorsMapToMakeItNotSuck[replay:GetScoreKey()].mines
             local missV = replayVectorsMapToMakeItNotSuck[replay:GetScoreKey()].misses
+            local trackV = replayVectorsMapToMakeItNotSuck[replay:GetScoreKey()].tracks
+            local typeV = replayVectorsMapToMakeItNotSuck[replay:GetScoreKey()].types
 
             local maxwifescore = 0
             local curwifescore = 0
@@ -340,15 +344,26 @@ local t = Def.ActorFrame {
             end
 
 
-            local addedMisses = 0 -- sometimes misses are in replaydata and not missdata, never both
             local missedRows = 0
+            local trackedMisses = {}
+
             for i=1, #noterowsV do
                 local nr = noterowsV[i]
                 if nr >= rowL and nr <= rowR then
                     local offset = offsetsV[i]
-                    if math.abs(offsetsV[i]) > 180 then
-                        addedMisses = addedMisses + 1
+
+                    -- account for offset data misses
+                    if math.abs(offsetsV[i]) > 180 and trackV[i] ~= nil then
+                        if trackedMisses[nr] == nil then
+                            trackedMisses[nr] = {}
+                        end
+                        trackedMisses[nr][trackV[i]] = true
+                    elseif typeV[i] ~= nil and typeV[i] == "TapNoteType_Mine" then
+                        -- this is a mine and we dont want to do anything with it
+                        -- because mine hits are tracked separately.
+                        -- the offset data shouldnt have mines but sometimes it does
                     else
+                        -- not a miss
 
                         taps = taps + 1
 
@@ -367,21 +382,31 @@ local t = Def.ActorFrame {
                 end
             end
 
+            -- account for missdata misses
+            for i,v in ipairs(missV) do
+                if v.row >= rowL and v.row <= rowR then
+                    if trackedMisses[v.row] == nil then
+                        trackedMisses[v.row] = {}
+                    end
+                    trackedMisses[v.row][v.track] = true
+                end
+            end
+
             -- subtract the missed or dropped holds
             for i,v in ipairs(holdsV) do
                 if v.row >= rowL and v.row <= rowR then
                     curwifescore = curwifescore + holdWorthFunc("HoldNoteScore_LetGo")
                 end
             end
-            -- subtract the misses
-            for i,v in ipairs(missV) do
-                if v.row >= rowL and v.row <= rowR then
+
+            -- subtract the tracked misses
+            for _, tracks in pairs(trackedMisses) do
+                for __,___ in pairs(tracks) do
                     curwifescore = curwifescore + judgfunc(1000, nil, timingScale)
                     maxwifescore = maxwifescore + maxtapworthFunc()
                 end
             end
-            curwifescore = curwifescore + judgfunc(1000, nil, timingScale) * addedMisses
-            maxwifescore = maxwifescore + maxtapworthFunc() * addedMisses
+
             -- subtract the mines
             for i,v in ipairs(minesV) do
                 if v.row >= rowL and v.row <= rowR then

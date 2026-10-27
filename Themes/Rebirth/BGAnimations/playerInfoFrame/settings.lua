@@ -426,14 +426,22 @@ local translations = {
     AssetSettings = THEME:GetString("Settings", "AssetSettings"),
     AssetSettingsExplanation = THEME:GetString("Settings", "AssetSettingsExplanation"),
     AssetSettingsButton = THEME:GetString("Settings", "AssetSettingsButton"),
-    Volume = THEME:GetString("Settings", "Volume"),
-    VolumeExplanation = THEME:GetString("Settings", "VolumeExplanation"),
+    VolumeMaster = THEME:GetString("Settings", "VolumeMaster"),
+    VolumeMasterExplanation = THEME:GetString("Settings", "VolumeMasterExplanation"),
+    VolumeActions = THEME:GetString("Settings", "VolumeActions"),
+    VolumeActionsExplanation = THEME:GetString("Settings", "VolumeActionsExplanation"),
+    VolumeBGM = THEME:GetString("Settings", "VolumeBGM"),
+    VolumeBGMExplanation = THEME:GetString("Settings", "VolumeBGMExplanation"),
     MenuSounds = THEME:GetString("Settings", "MenuSounds"),
     MenuSoundsExplanation = THEME:GetString("Settings", "MenuSoundsExplanation"),
     MineSounds = THEME:GetString("Settings", "MineSounds"),
     MineSoundsExplanation = THEME:GetString("Settings", "MineSoundsExplanation"),
     PitchRates = THEME:GetString("Settings", "PitchRates"),
     PitchRatesExplanation = THEME:GetString("Settings", "PitchRatesExplanation"),
+    PlayTitleMusic = THEME:GetString("Settings", "PlayTitleMusic"),
+    PlayTitleMusicExplanation = THEME:GetString("Settings", "PlayTitleMusicExplanation"),
+    PlaySongSelectBGM = THEME:GetString("Settings", "PlaySongSelectBGM"),
+    PlaySongSelectBGMExplanation = THEME:GetString("Settings", "PlaySongSelectBGMExplanation"),
     CalibrateAudioSync = THEME:GetString("Settings", "CalibrateAudioSync"),
     CalibrateAudioSyncExplanation = THEME:GetString("Settings", "CalibrateAudioSyncExplanation"),
     CalibrateAudioSyncButton = THEME:GetString("Settings", "CalibrateAudioSyncButton"),
@@ -501,12 +509,6 @@ SCUFF.showingNoteskins = false
 SCUFF.showingPreview = false
 SCUFF.showingColor = false
 SCUFF.showingKeybinds = false
-
--- reset customize gameplay here
--- couldnt think of a really good place to put it instead
-playerConfig:get_data().CustomizeGameplay = false
-playerConfig:set_dirty()
-playerConfig:save()
 
 local t = Def.ActorFrame {
     Name = "SettingsFile",
@@ -3426,6 +3428,8 @@ local function rightFrame()
         tipType = themeoption("global", "TipType"),
         allowBGChanges = themeoption("global", "StaticBackgrounds"),
         videoBanners = themeoption("global", "VideoBanners"),
+        playTitleMusic = themeoption("global", "PlayTitleMusic"),
+        playSongSelectBGM = themeoption("global", "PlaySongSelectBGM"),
 
         -- gameplay elements
         bpmDisplay = playeroption("BPMDisplay"),
@@ -6361,26 +6365,72 @@ local function rightFrame()
         -- SOUND OPTIONS
         ["Sound Options"] = {
             {
-                Name = "Volume",
-                DisplayName = translations["Volume"],
+                Name = "VolumeMaster",
+                DisplayName = translations["VolumeMaster"],
                 Type = "SingleChoice",
-                Explanation = translations["VolumeExplanation"],
+                Explanation = translations["VolumeMasterExplanation"],
                 Directions = {
                     Left = function()
-                        local x = PREFSMAN:GetPreference("SoundVolume")
+                        local x = PREFSMAN:GetPreference("SoundVolumeMaster")
                         x = notShit.round(x - 0.01, 3)
                         if x < 0 then x = 1 end
                         SOUND:SetVolume(notShit.round(x, 3))
                     end,
                     Right = function()
-                        local x = PREFSMAN:GetPreference("SoundVolume")
+                        local x = PREFSMAN:GetPreference("SoundVolumeMaster")
                         x = notShit.round(x + 0.01, 3)
                         if x > 1 then x = 0 end
                         SOUND:SetVolume(notShit.round(x, 3))
                     end,
                 },
                 ChoiceIndexGetter = function()
-                    return notShit.round(PREFSMAN:GetPreference("SoundVolume") * 100, 0) .. "%"
+                    return notShit.round(PREFSMAN:GetPreference("SoundVolumeMaster") * 100, 0) .. "%"
+                end,
+            },
+            {
+                Name = "VolumeActions",
+                DisplayName = translations["VolumeActions"],
+                Type = "SingleChoice",
+                Explanation = translations["VolumeActionsExplanation"],
+                Directions = {
+                    Left = function()
+                        local x = PREFSMAN:GetPreference("SoundVolumeActions")
+                        x = notShit.round(x - 0.01, 3)
+                        if x < 0 then x = 1 end
+                        SOUND:SetActionsVolume(notShit.round(x, 3))
+                    end,
+                    Right = function()
+                        local x = PREFSMAN:GetPreference("SoundVolumeActions")
+                        x = notShit.round(x + 0.01, 3)
+                        if x > 1 then x = 0 end
+                        SOUND:SetActionsVolume(notShit.round(x, 3))
+                    end,
+                },
+                ChoiceIndexGetter = function()
+                    return notShit.round(PREFSMAN:GetPreference("SoundVolumeActions") * 100, 0) .. "%"
+                end,
+            },
+            {
+                Name = "VolumeBGM",
+                DisplayName = translations["VolumeBGM"],
+                Type = "SingleChoice",
+                Explanation = translations["VolumeBGMExplanation"],
+                Directions = {
+                    Left = function()
+                        local x = PREFSMAN:GetPreference("SoundVolumeBGM")
+                        x = notShit.round(x - 0.01, 3)
+                        if x < 0 then x = 1 end
+                        SOUND:SetBGMVolume(notShit.round(x, 3))
+                    end,
+                    Right = function()
+                        local x = PREFSMAN:GetPreference("SoundVolumeBGM")
+                        x = notShit.round(x + 0.01, 3)
+                        if x > 1 then x = 0 end
+                        SOUND:SetBGMVolume(notShit.round(x, 3))
+                    end,
+                },
+                ChoiceIndexGetter = function()
+                    return notShit.round(PREFSMAN:GetPreference("SoundVolumeBGM") * 100, 0) .. "%"
                 end,
             },
             {
@@ -6409,6 +6459,24 @@ local function rightFrame()
                 Choices = choiceSkeleton("On", "Off"),
                 Directions = preferenceToggleDirections("EnablePitchRates", true, false),
                 ChoiceIndexGetter = preferenceToggleIndexGetter("EnablePitchRates", true),
+            },
+            {
+                Name = "Play Title Music",
+                DisplayName = translations["PlayTitleMusic"],
+                Type = "SingleChoice",
+                Explanation = translations["PlayTitleMusicExplanation"],
+                Choices = choiceSkeleton("On", "Off"),
+                Directions = optionDataToggleDirectionsFUNC("playTitleMusic", true, false),
+                ChoiceIndexGetter = optionDataToggleIndexGetterFUNC("playTitleMusic", true),
+            },
+            {
+                Name = "Play Song Select BGM",
+                DisplayName = translations["PlaySongSelectBGM"],
+                Type = "SingleChoice",
+                Explanation = translations["PlaySongSelectBGMExplanation"],
+                Choices = choiceSkeleton("On", "Off"),
+                Directions = optionDataToggleDirectionsFUNC("playSongSelectBGM", true, false),
+                ChoiceIndexGetter = optionDataToggleIndexGetterFUNC("playSongSelectBGM", true),
             },
             {
                 Name = "Calibrate Audio Sync",
